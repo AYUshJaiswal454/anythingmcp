@@ -127,6 +127,8 @@ import * as docusign from './intl/docusign.json';
 import * as drip from './intl/drip.json';
 import * as dropbox from './intl/dropbox.json';
 import * as dropboxSign from './intl/dropbox-sign.json';
+import * as dynamics365BusinessCentral from './intl/dynamics365-business-central.json';
+import * as dynamics365Sales from './intl/dynamics365-sales.json';
 import * as easypost from './intl/easypost.json';
 import * as ebaySell from './intl/ebay-sell.json';
 import * as ecwid from './intl/ecwid.json';
@@ -171,6 +173,7 @@ import * as googleTasks from './intl/google-tasks.json';
 import * as gorgias from './intl/gorgias.json';
 import * as greenhouse from './intl/greenhouse.json';
 import * as gtinLookup from './intl/gtin-lookup.json';
+import * as gusto from './intl/gusto.json';
 import * as hackernews from './intl/hackernews.json';
 import * as harvest from './intl/harvest.json';
 import * as heap from './intl/heap.json';
@@ -229,6 +232,7 @@ import * as monday from './intl/monday.json';
 import * as mongodb from './intl/mongodb.json';
 import * as mssql from './intl/mssql.json';
 import * as mysql from './intl/mysql.json';
+import * as netsuite from './intl/netsuite.json';
 import * as neverbounce from './intl/neverbounce.json';
 import * as newRelic from './intl/new-relic.json';
 import * as newsapi from './intl/newsapi.json';
@@ -311,9 +315,11 @@ import * as teamworkProjects from './intl/teamwork-projects.json';
 import * as telegramBot from './intl/telegram-bot.json';
 import * as ticktick from './intl/ticktick.json';
 import * as tidio from './intl/tidio.json';
+import * as tiktokAds from './intl/tiktok-ads.json';
 import * as timetastic from './intl/timetastic.json';
 import * as todoist from './intl/todoist.json';
 import * as togglTrack from './intl/toggl-track.json';
+import * as tradingview from './intl/tradingview.json';
 import * as trello from './intl/trello.json';
 import * as trenitalia from './intl/trenitalia.json';
 import * as twelveData from './intl/twelve-data.json';
@@ -337,6 +343,7 @@ import * as workable from './intl/workable.json';
 import * as worksection from './intl/worksection.json';
 import * as wrike from './intl/wrike.json';
 import * as wufoo from './intl/wufoo.json';
+import * as x from './intl/x.json';
 import * as xero from './intl/xero.json';
 import * as youcom from './intl/youcom.json';
 import * as youtrack from './intl/youtrack.json';
@@ -704,6 +711,8 @@ const RAW_ADAPTERS: AdapterDefinition[] = [
   drip as unknown as AdapterDefinition,
   dropbox as unknown as AdapterDefinition,
   dropboxSign as unknown as AdapterDefinition,
+  dynamics365BusinessCentral as unknown as AdapterDefinition,
+  dynamics365Sales as unknown as AdapterDefinition,
   easypost as unknown as AdapterDefinition,
   ebaySell as unknown as AdapterDefinition,
   ecwid as unknown as AdapterDefinition,
@@ -748,6 +757,7 @@ const RAW_ADAPTERS: AdapterDefinition[] = [
   gorgias as unknown as AdapterDefinition,
   greenhouse as unknown as AdapterDefinition,
   gtinLookup as unknown as AdapterDefinition,
+  gusto as unknown as AdapterDefinition,
   hackernews as unknown as AdapterDefinition,
   harvest as unknown as AdapterDefinition,
   heap as unknown as AdapterDefinition,
@@ -806,6 +816,7 @@ const RAW_ADAPTERS: AdapterDefinition[] = [
   mongodb as unknown as AdapterDefinition,
   mssql as unknown as AdapterDefinition,
   mysql as unknown as AdapterDefinition,
+  netsuite as unknown as AdapterDefinition,
   neverbounce as unknown as AdapterDefinition,
   newRelic as unknown as AdapterDefinition,
   newsapi as unknown as AdapterDefinition,
@@ -888,9 +899,11 @@ const RAW_ADAPTERS: AdapterDefinition[] = [
   telegramBot as unknown as AdapterDefinition,
   ticktick as unknown as AdapterDefinition,
   tidio as unknown as AdapterDefinition,
+  tiktokAds as unknown as AdapterDefinition,
   timetastic as unknown as AdapterDefinition,
   todoist as unknown as AdapterDefinition,
   togglTrack as unknown as AdapterDefinition,
+  tradingview as unknown as AdapterDefinition,
   trello as unknown as AdapterDefinition,
   trenitalia as unknown as AdapterDefinition,
   twelveData as unknown as AdapterDefinition,
@@ -914,6 +927,7 @@ const RAW_ADAPTERS: AdapterDefinition[] = [
   worksection as unknown as AdapterDefinition,
   wrike as unknown as AdapterDefinition,
   wufoo as unknown as AdapterDefinition,
+  x as unknown as AdapterDefinition,
   xero as unknown as AdapterDefinition,
   youcom as unknown as AdapterDefinition,
   youtrack as unknown as AdapterDefinition,
