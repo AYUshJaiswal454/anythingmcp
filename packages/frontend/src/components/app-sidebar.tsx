@@ -39,38 +39,19 @@ const SettingsIcon = () => (
   <I><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></I>
 );
 
-type NavLink = { href: string; label: string; icon: () => React.ReactNode };
-type NavGroup = { group: string; items: NavLink[] };
+import { NAV } from '@/lib/navigation';
 
-const NAV: NavGroup[] = [
-  {
-    group: 'Overview',
-    items: [
-      { href: '/', label: 'Dashboard', icon: DashboardIcon },
-      { href: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
-      { href: '/logs', label: 'Audit Log', icon: LogsIcon },
-    ],
-  },
-  {
-    group: 'Build',
-    items: [
-      { href: '/connectors', label: 'Connectors', icon: ConnectorsIcon },
-      { href: '/connectors/store', label: 'Marketplace', icon: StoreIcon },
-      { href: '/mcp-server', label: 'MCP Servers', icon: McpIcon },
-    ],
-  },
-  {
-    group: 'Intelligence',
-    items: [
-      { href: '/knowledge-graph', label: 'Knowledge Graph', icon: KgIcon },
-      { href: '/knowledge-graph/skills', label: 'AI Skills', icon: SkillsIcon },
-    ],
-  },
-  {
-    group: 'Get started',
-    items: [{ href: '/welcome', label: 'Setup & onboarding', icon: OnboardingIcon }],
-  },
-];
+const NAV_ICONS: Record<string, () => React.ReactNode> = {
+  '/': DashboardIcon,
+  '/analytics': AnalyticsIcon,
+  '/logs': LogsIcon,
+  '/connectors': ConnectorsIcon,
+  '/connectors/store': StoreIcon,
+  '/mcp-server': McpIcon,
+  '/knowledge-graph': KgIcon,
+  '/knowledge-graph/skills': SkillsIcon,
+  '/welcome': OnboardingIcon,
+};
 
 // All navigable hrefs, used to resolve the single active item: the longest
 // href that prefix-matches the current path wins (so /connectors/store lights
@@ -126,7 +107,9 @@ export function AppSidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClo
             <div className="px-2.5 pb-1 pt-2.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[var(--text-3)]">
               {g.group}
             </div>
-            {g.items.map((item) => (
+            {g.items.map((item) => {
+              const Icon = NAV_ICONS[item.href];
+              return (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -138,10 +121,11 @@ export function AppSidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClo
                       : 'text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
                   )}
                 >
-                  <item.icon />
+                  {Icon && <Icon />}
                   {item.label}
                 </Link>
-              ))}
+              );
+            })}
           </div>
         ))}
       </nav>

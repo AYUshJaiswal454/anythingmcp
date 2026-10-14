@@ -6,47 +6,18 @@ import { useAuth } from '@/lib/auth-context';
 import { AppShell } from '@/components/app-shell';
 import { cn } from '@/lib/utils';
 
-interface SidebarItem {
-  href: string;
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ size?: number }>;
-  exact?: boolean;
-  adminOnly?: boolean;
-  /** Hidden in cloud. The backend answers 404 there regardless. */
-  selfHostedOnly?: boolean;
-}
+import { SIDEBAR_SECTIONS } from '@/lib/navigation';
 
-interface SidebarSection {
-  title?: string;
-  icon?: React.ComponentType<{ size?: number }>;
-  adminOnly?: boolean;
-  items: SidebarItem[];
-}
-
-const SIDEBAR_SECTIONS: SidebarSection[] = [
-  {
-    items: [
-      { href: '/settings', label: 'Profile', description: 'Name, email, password', icon: GearIcon, exact: true },
-      { href: '/settings/connections', label: 'Connections', description: 'What each AI client can reach', icon: PlugIcon },
-    ],
-  },
-  {
-    title: 'Organization',
-    icon: BuildingIcon,
-    items: [
-      { href: '/settings/organization', label: 'General', description: 'Workspace and new orgs', icon: BuildingIcon },
-      { href: '/settings/users', label: 'Users', description: 'Members and invitations', icon: UsersIcon, adminOnly: true },
-      { href: '/settings/roles', label: 'Roles', description: 'MCP tool access control', icon: ShieldIcon, adminOnly: true },
-      // Self-hosted only: SSO assumes the workspace owns its own directory,
-      // tenant and operator. The backend refuses these routes in cloud, so
-      // showing the entry there would lead an admin to a page that 404s.
-      { href: '/settings/identity-providers', label: 'Single sign-on', description: 'Microsoft, Google, Okta', icon: FingerprintIcon, adminOnly: true, selfHostedOnly: true },
-      { href: '/settings/license', label: 'License', description: 'Plan, billing, subscription', icon: KeyIcon, adminOnly: true },
-      { href: '/settings/admin', label: 'Administration', description: 'SMTP, alerts, footer links', icon: WrenchIcon, adminOnly: true },
-    ],
-  },
-];
+const SETTINGS_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  '/settings': GearIcon,
+  '/settings/connections': PlugIcon,
+  '/settings/organization': BuildingIcon,
+  '/settings/users': UsersIcon,
+  '/settings/roles': ShieldIcon,
+  '/settings/identity-providers': FingerprintIcon,
+  '/settings/license': KeyIcon,
+  '/settings/admin': WrenchIcon,
+};
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -75,6 +46,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                   if (item.adminOnly && !isAdmin) return null;
                   if (item.selfHostedOnly && isCloud) return null;
                   const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+                  const Icon = SETTINGS_ICONS[item.href];
                   return (
                     <Link
                       key={item.href}
@@ -86,7 +58,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                           : 'text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
                       )}
                     >
-                      <item.icon size={15} />
+                      {Icon && <Icon size={15} />}
                       <div className="min-w-0">
                         <div className="truncate">{item.label}</div>
                         <div className="hidden truncate text-[11px] text-[var(--text-3)] lg:block">{item.description}</div>
