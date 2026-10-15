@@ -81,13 +81,26 @@ async function setupSession(
   });
 }
 
+async function getPaletteShortcut(page: Page): Promise<string> {
+  const isMac = await page.evaluate(() =>
+    /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent || navigator.platform || '')
+  );
+  return isMac ? 'Meta+k' : 'Control+k';
+}
+
 async function openCommandPalette(page: Page) {
   const palette = page.getByRole('dialog');
+  const shortcut = await getPaletteShortcut(page);
   await expect.poll(async () => {
     if (await palette.isVisible()) return true;
-    await page.keyboard.press('ControlOrMeta+k');
-    return await palette.isVisible();
-  }, { timeout: 7000, intervals: [150, 300, 500] }).toBe(true);
+    await page.keyboard.press(shortcut);
+    try {
+      await expect(palette).toBeVisible({ timeout: 500 });
+      return true;
+    } catch {
+      return false;
+    }
+  }, { timeout: 7000, intervals: [200, 300] }).toBe(true);
 
   const input = page.getByRole('combobox');
   await expect(input).toBeVisible();
@@ -103,11 +116,17 @@ test.describe('Command Palette', () => {
     await expect(palette).not.toBeVisible();
 
     // Open via keyboard shortcut
+    const shortcut = await getPaletteShortcut(page);
     await expect.poll(async () => {
       if (await palette.isVisible()) return true;
-      await page.keyboard.press('ControlOrMeta+k');
-      return await palette.isVisible();
-    }, { timeout: 7000, intervals: [150, 300, 500] }).toBe(true);
+      await page.keyboard.press(shortcut);
+      try {
+        await expect(palette).toBeVisible({ timeout: 500 });
+        return true;
+      } catch {
+        return false;
+      }
+    }, { timeout: 7000, intervals: [200, 300] }).toBe(true);
 
     // Combobox input should be focused
     const searchInput = page.getByRole('combobox');
@@ -319,5 +338,272 @@ test.describe('Command Palette', () => {
 
     await second.input.fill('Log out');
     await expect(page.getByRole('option', { name: /Log out/i })).toBeVisible();
+  });
+
+  test('handles malformed / non-array orgs responses gracefully without crashing', async ({ page }) => {
+    await setupSession(page);
+    // Override organizations/mine to return a non-array object
+    await page.route('**/api/organizations/mine', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'not an array' }),
+      });
+    });
+
+    await page.goto('/');
+    await expect(page.locator('aside')).toBeVisible();
+
+    const { palette, input } = await openCommandPalette(page);
+    await expect(palette).toBeVisible();
+    await input.fill('dash');
+    await expect(page.getByRole('option', { name: /Dashboard/i })).toBeVisible();
+  });
+
+  test('resets search query every time palette opens, via keyboard and header button', async ({ page }) => {
+    await setupSession(page);
+    await page.goto('/');
+
+    // 1. Open via shortcut, type a query
+    const first = await openCommandPalette(page);
+    await first.input.fill('random search string');
+    await expect(first.input).toHaveValue('random search string');
+
+    // Close via Esc
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // 2. Re-open via shortcut, check query is empty
+    const second = await openCommandPalette(page);
+    await expect(second.input).toHaveValue('');
+
+    // Type query again
+    await second.input.fill('another query');
+    await expect(second.input).toHaveValue('another query');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // 3. Re-open via header button, check query is empty
+    const searchButton = page.getByRole('button', { name: 'Open command palette' }).first();
+    await searchButton.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const input = page.getByRole('combobox');
+    await expect(input).toHaveValue('');
+  });
+
+  test('restores keyboard focus to opening element on close', async ({ page }) => {
+    await setupSession(page);
+    await page.goto('/');
+
+    // 1. When opened via header button
+    const searchBtn = page.getByRole('button', { name: 'Open command palette' }).first();
+    await searchBtn.focus();
+    await expect(searchBtn).toBeFocused();
+    await searchBtn.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(searchBtn).toBeFocused();
+
+    // 2. When opened via shortcut while another element has focus
+    const newConnectorBtn = page.getByRole('button', { name: 'New connector' });
+    await newConnectorBtn.focus();
+    await expect(newConnectorBtn).toBeFocused();
+
+    const shortcut = await getPaletteShortcut(page);
+    await page.keyboard.press(shortcut);
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(newConnectorBtn).toBeFocused();
+  });
+
+  test('keyboard shortcut platform detection and modifier rejection', async ({ page }) => {
+    await setupSession(page);
+    await page.goto('/');
+    await expect(page.locator('aside')).toBeVisible();
+
+    const palette = page.getByRole('dialog');
+
+    // 1. Shift+K and Alt+K must NOT open palette
+    await page.keyboard.press('Shift+k');
+    await expect(palette).not.toBeVisible();
+    await page.keyboard.press('Alt+k');
+    await expect(palette).not.toBeVisible();
+
+    // 2. On simulated Mac platform: Command+K opens, Control+K does NOT
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel', configurable: true });
+      Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', configurable: true });
+      if ((navigator as any).userAgentData) {
+        Object.defineProperty(navigator, 'userAgentData', { get: () => ({ platform: 'macOS' }), configurable: true });
+      }
+    });
+
+    // Control+K on Mac should NOT open palette (avoids hijacking kill-line)
+    await page.keyboard.press('Control+k');
+    await expect(palette).not.toBeVisible();
+
+    // Re-focus the page in case browser defaults captured the rejected shortcut
+    await page.locator('aside').click();
+
+    // Meta+K on Mac should open palette
+    await page.keyboard.press('Meta+k');
+    await expect(palette).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(palette).not.toBeVisible();
+
+    // 3. On simulated non-Mac platform: Control+K opens, Meta+K does NOT
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
+      Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', configurable: true });
+      if ((navigator as any).userAgentData) {
+        Object.defineProperty(navigator, 'userAgentData', { get: () => ({ platform: 'Windows' }), configurable: true });
+      }
+    });
+
+    // Meta+K on Windows should NOT open palette
+    await page.keyboard.press('Meta+k');
+    await expect(palette).not.toBeVisible();
+
+    // Re-focus the page in case browser defaults captured the rejected shortcut
+    await page.locator('aside').click();
+
+    // Control+K on Windows should open palette
+    await page.keyboard.press('Control+k');
+    await expect(palette).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(palette).not.toBeVisible();
+  });
+
+  test('ignores Enter key when IME composition is active', async ({ page }) => {
+    await setupSession(page);
+    await page.goto('/');
+
+    const { input } = await openCommandPalette(page);
+    await input.fill('audit');
+    await expect(page.getByRole('option', { name: /Audit Log/i })).toBeVisible();
+
+    // Dispatch an Enter event with isComposing: true
+    await input.evaluate((el) => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        bubbles: true,
+        cancelable: true,
+        isComposing: true,
+      });
+      el.dispatchEvent(event);
+    });
+
+    // Dialog should still be open, and URL should not have changed to /logs
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/');
+  });
+
+  test('accessibility: groups use role=group and aria-labelledby, loading status is outside listbox', async ({ page }) => {
+    await setupSession(page);
+    await page.goto('/');
+
+    const { palette } = await openCommandPalette(page);
+
+    const listbox = palette.getByRole('listbox', { name: 'Commands' });
+    await expect(listbox).toBeVisible();
+
+    // Verify groups have role="group" and aria-labelledby
+    const groups = listbox.locator('[role="group"]');
+    const groupCount = await groups.count();
+    expect(groupCount).toBeGreaterThan(0);
+
+    for (let i = 0; i < groupCount; i++) {
+      const group = groups.nth(i);
+      const labelledBy = await group.getAttribute('aria-labelledby');
+      expect(labelledBy).toBeTruthy();
+      const header = page.locator(`#${labelledBy}`);
+      await expect(header).toBeVisible();
+    }
+
+    // Verify that loading status is NOT inside listbox
+    const loadingInsideListbox = listbox.locator('[role="status"]');
+    await expect(loadingInsideListbox).toHaveCount(0);
+  });
+
+  test('caches connectors and MCP servers in module-level cache keyed by organizationId', async ({ page }) => {
+    let connectorsFetches = 0;
+    let mcpFetches = 0;
+
+    await setupSession(page);
+
+    await page.route('**/api/connectors', async (route) => {
+      connectorsFetches++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ id: 'c1', name: 'Stripe Payments', type: 'REST', slug: 'stripe' }]),
+      });
+    });
+
+    await page.route('**/api/mcp-servers', async (route) => {
+      mcpFetches++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ id: 's1', name: 'Search Server', slug: 'search-server' }]),
+      });
+    });
+
+    await page.goto('/settings');
+    await expect(page.locator('aside')).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    // Reset fetch counters after page load so we only measure command palette fetches
+    connectorsFetches = 0;
+    mcpFetches = 0;
+
+    // 1. Open first time - fetches records
+    const first = await openCommandPalette(page);
+    await first.input.fill('stripe');
+    await expect(page.getByRole('option', { name: /Stripe Payments/i })).toBeVisible();
+    expect(connectorsFetches).toBe(1);
+    expect(mcpFetches).toBe(1);
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // 2. Re-open without page reload - should use module cache, no new network calls
+    const second = await openCommandPalette(page);
+    await second.input.fill('stripe');
+    await expect(page.getByRole('option', { name: /Stripe Payments/i })).toBeVisible();
+    expect(connectorsFetches).toBe(1);
+    expect(mcpFetches).toBe(1);
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // 3. Open a third time - still cached
+    const third = await openCommandPalette(page);
+    await third.input.fill('search');
+    await expect(page.getByRole('option', { name: /Search Server/i })).toBeVisible();
+    expect(connectorsFetches).toBe(1);
+    expect(mcpFetches).toBe(1);
+  });
+
+  test('section-level and item-level adminOnly and selfHostedOnly visibility filtering', async ({ page }) => {
+    // Viewer session on self-hosted
+    await setupSession(page, { user: VIEWER_USER, deploymentMode: 'self-hosted' });
+    await page.goto('/settings');
+
+    // Viewer should only see Profile and Connections (not Organization admin items)
+    const settingsNav = page.locator('nav');
+    await expect(settingsNav.getByRole('link', { name: /Profile/i })).toBeVisible();
+    await expect(settingsNav.getByRole('link', { name: /Connections/i })).toBeVisible();
+    await expect(settingsNav.getByRole('link', { name: /Users/i })).not.toBeVisible();
+    await expect(settingsNav.getByRole('link', { name: /Roles/i })).not.toBeVisible();
+    await expect(settingsNav.getByRole('link', { name: /Single sign-on/i })).not.toBeVisible();
+    await expect(settingsNav.getByRole('link', { name: /License/i })).not.toBeVisible();
+    await expect(settingsNav.getByRole('link', { name: /Administration/i })).not.toBeVisible();
   });
 });

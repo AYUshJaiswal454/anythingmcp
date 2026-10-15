@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { LogoIcon } from '@/components/logo-icon';
 import { cn } from '@/lib/utils';
 import { GithubStarButton } from '@/components/github-star-button';
+import { NAV } from '@/lib/navigation';
 
 /* ── Inline icons (match the redesign prototype) ── */
 function I({ d, children, ...p }: { d?: string; children?: React.ReactNode } & React.SVGProps<SVGSVGElement>) {
@@ -38,8 +39,6 @@ const OnboardingIcon = () => <I><path d="M12 2v4M12 2a10 10 0 1 0 10 10" /><path
 const SettingsIcon = () => (
   <I><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></I>
 );
-
-import { NAV } from '@/lib/navigation';
 
 const NAV_ICONS: Record<string, () => React.ReactNode> = {
   '/': DashboardIcon,
@@ -139,7 +138,7 @@ export function AppSidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClo
             <div className="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[var(--text-3)]">
               Switch workspace
             </div>
-            {(orgs || []).map((org) => {
+            {(Array.isArray(orgs) ? orgs : []).map((org) => {
               const isCurrent = org.id === user?.organizationId;
               return (
                 <button

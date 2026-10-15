@@ -81,4 +81,39 @@ export const SIDEBAR_SECTIONS: SettingsSection[] = [
   },
 ];
 
-export { SIDEBAR_SECTIONS as SETTINGS_SECTIONS };
+export interface NavigationVisibilityContext {
+  isAdmin: boolean;
+  isCloud: boolean;
+}
+
+export function isSettingsItemVisible(
+  item: SettingsItem,
+  context: NavigationVisibilityContext,
+  section?: SettingsSection
+): boolean {
+  if (section?.adminOnly && !context.isAdmin) return false;
+  if (item.adminOnly && !context.isAdmin) return false;
+  if (item.selfHostedOnly && context.isCloud) return false;
+  return true;
+}
+
+export function isSettingsSectionVisible(
+  section: SettingsSection,
+  context: NavigationVisibilityContext
+): boolean {
+  if (section.adminOnly && !context.isAdmin) return false;
+  return section.items.some((item) => isSettingsItemVisible(item, context, section));
+}
+
+export function getVisibleSettingsSections(
+  sections: SettingsSection[],
+  context: NavigationVisibilityContext
+): SettingsSection[] {
+  return sections
+    .filter((section) => !section.adminOnly || context.isAdmin)
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => isSettingsItemVisible(item, context, section)),
+    }))
+    .filter((section) => section.items.length > 0);
+}
