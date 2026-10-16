@@ -29,40 +29,30 @@ interface ResultGroup {
   items: CommandItem[];
 }
 
-interface OrgRecordsCache {
-  connectors: Connector[];
-  mcpServers: McpServer[];
-}
+import {
+  recordsCache,
+  inFlightRequests,
+  clearCommandPaletteCache,
+  type OrgRecordsCache,
+} from '@/lib/command-palette-cache';
 
-// Module-level cache keyed by organizationId
-const recordsCache = new Map<string, OrgRecordsCache>();
-const inFlightRequests = new Map<string, Promise<OrgRecordsCache>>();
-
-export function clearCommandPaletteCache(): void {
-  recordsCache.clear();
-  inFlightRequests.clear();
-}
+export { clearCommandPaletteCache };
 
 function fetchOrgRecords(orgId: string, token: string): Promise<OrgRecordsCache> {
-  const cached = recordsCache.get(orgId);
-  if (cached) return Promise.resolve(cached);
-
   const pending = inFlightRequests.get(orgId);
   if (pending) return pending;
 
-  const promise = Promise.allSettled([connectors.list(token), mcpServers.list(token)])
-    .then(([connRes, mcpRes]) => {
-      const connData = connRes.status === 'fulfilled' && Array.isArray(connRes.value) ? connRes.value : [];
-      const mcpData = mcpRes.status === 'fulfilled' && Array.isArray(mcpRes.value) ? mcpRes.value : [];
-      const result: OrgRecordsCache = { connectors: connData, mcpServers: mcpData };
-      recordsCache.set(orgId, result);
-      inFlightRequests.delete(orgId);
-      return result;
+  const promise = Promise.all([connectors.list(token), mcpServers.list(token)])
+    .then(([connList, mcpList]) => {
+      if (Array.isArray(connList) && Array.isArray(mcpList)) {
+        const result: OrgRecordsCache = { connectors: connList, mcpServers: mcpList };
+        recordsCache.set(orgId, result);
+        return result;
+      }
+      throw new Error('Connectors or MCP servers response is not an array');
     })
-    .catch(() => {
-      const empty: OrgRecordsCache = { connectors: [], mcpServers: [] };
+    .finally(() => {
       inFlightRequests.delete(orgId);
-      return empty;
     });
 
   inFlightRequests.set(orgId, promise);
@@ -226,19 +216,24 @@ function CommandPaletteContent({ onClose }: CommandPaletteContentProps) {
   const isCloud = deploymentMode === 'cloud';
   const isDark = resolvedTheme === 'dark';
 
-  // Load records from API if not already cached for current organization
+  // Load/refresh records from API (stale-while-revalidate)
   useEffect(() => {
     if (!token || !user?.organizationId) return;
 
     const currentOrgId = user.organizationId;
-    if (recordsCache.has(currentOrgId)) return;
-
     let active = true;
+
     fetchOrgRecords(currentOrgId, token)
       .then((data) => {
         if (!active) return;
         setConnectorsData(data.connectors);
         setMcpServersData(data.mcpServers);
+      })
+      .catch(() => {
+        if (!active) return;
+        // Keep existing cached data if present; if initial fetch failed, fallback to empty arrays
+        setConnectorsData((prev) => prev ?? []);
+        setMcpServersData((prev) => prev ?? []);
       })
       .finally(() => {
         if (active) {
@@ -357,7 +352,10 @@ function CommandPaletteContent({ onClose }: CommandPaletteContentProps) {
         description: `Workspace (${org.role})`,
         group: 'Actions' as const,
         keywords: ['switch to', 'workspace', 'organization', 'org', org.name],
-        action: () => switchOrg(org.id),
+        action: () => {
+          clearCommandPaletteCache();
+          switchOrg(org.id);
+        },
       });
     }
 
@@ -367,7 +365,10 @@ function CommandPaletteContent({ onClose }: CommandPaletteContentProps) {
       description: 'Sign out of your account',
       group: 'Actions' as const,
       keywords: ['log out', 'logout', 'sign out'],
-      action: () => logout(),
+      action: () => {
+        clearCommandPaletteCache();
+        logout();
+      },
     });
 
     const actions = actionCandidates
@@ -586,7 +587,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   useEffect(() => {
     function handleGlobalKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented) return;
-      if (e.key !== 'k' && e.key !== 'K') return;
+      if (e.key !== 'k' && e.key !== 'K' && e.code !== 'KeyK') return;
       if (e.shiftKey || e.altKey) return;
 
       const isMac = isMacPlatform();

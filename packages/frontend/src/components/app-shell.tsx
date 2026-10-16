@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useSyncExternalStore } from 'react';
 import { useTheme } from '@/lib/theme-context';
 import { AppSidebar } from '@/components/app-sidebar';
-import { CommandPalette } from '@/components/command-palette';
+import { CommandPalette, isMacPlatform } from '@/components/command-palette';
 import { Footer } from '@/components/footer';
 import { TrialBanner } from '@/components/trial-banner';
 import { SubscriptionBanner } from '@/components/subscription-banner';
@@ -84,7 +84,7 @@ export function AppShell({
 
   const isMac = useSyncExternalStore(
     () => () => {},
-    () => /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent || navigator.platform || ''),
+    () => isMacPlatform(),
     () => true
   );
   const shortcutLabel = isMac ? '⌘K' : 'Ctrl K';
@@ -161,7 +161,7 @@ export function AppShell({
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              aria-label="Open command palette"
+              aria-label={`Search (${shortcutLabel})`}
               className="flex h-9 items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[13px] text-[var(--text-3)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] max-md:hidden"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

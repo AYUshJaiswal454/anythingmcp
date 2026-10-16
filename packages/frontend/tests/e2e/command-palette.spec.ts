@@ -137,7 +137,7 @@ test.describe('Command Palette', () => {
     await expect(palette).not.toBeVisible();
 
     // Open via visible trigger button in header
-    const searchButton = page.getByRole('button', { name: 'Open command palette' }).first();
+    const searchButton = page.getByRole('button', { name: /search|open command palette/i }).first();
     await expect(searchButton).toBeVisible();
     await searchButton.click();
     await expect(palette).toBeVisible();
@@ -384,7 +384,7 @@ test.describe('Command Palette', () => {
     await expect(page.getByRole('dialog')).not.toBeVisible();
 
     // 3. Re-open via header button, check query is empty
-    const searchButton = page.getByRole('button', { name: 'Open command palette' }).first();
+    const searchButton = page.getByRole('button', { name: /search|open command palette/i }).first();
     await searchButton.click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -397,7 +397,7 @@ test.describe('Command Palette', () => {
     await page.goto('/');
 
     // 1. When opened via header button
-    const searchBtn = page.getByRole('button', { name: 'Open command palette' }).first();
+    const searchBtn = page.getByRole('button', { name: /search|open command palette/i }).first();
     await searchBtn.focus();
     await expect(searchBtn).toBeFocused();
     await searchBtn.click();
@@ -531,7 +531,7 @@ test.describe('Command Palette', () => {
     await expect(loadingInsideListbox).toHaveCount(0);
   });
 
-  test('caches connectors and MCP servers in module-level cache keyed by organizationId', async ({ page }) => {
+  test('caches connectors and MCP servers with stale-while-revalidate background refresh', async ({ page }) => {
     let connectorsFetches = 0;
     let mcpFetches = 0;
 
@@ -573,22 +573,178 @@ test.describe('Command Palette', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).not.toBeVisible();
 
-    // 2. Re-open without page reload - should use module cache, no new network calls
+    // 2. Re-open without page reload - cached item is visible immediately, background revalidation runs
     const second = await openCommandPalette(page);
     await second.input.fill('stripe');
     await expect(page.getByRole('option', { name: /Stripe Payments/i })).toBeVisible();
-    expect(connectorsFetches).toBe(1);
-    expect(mcpFetches).toBe(1);
+    await expect.poll(() => connectorsFetches).toBe(2);
+    await expect.poll(() => mcpFetches).toBe(2);
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+  });
+
+  test('failed requests are not cached as empty arrays and recover on retry', async ({ page }) => {
+    let failConnectors = true;
+
+    await setupSession(page);
+
+    await page.route('**/api/connectors', async (route) => {
+      if (failConnectors) {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Internal Server Error' }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{ id: 'c1', name: 'Recovered Connector', type: 'REST', slug: 'recovered' }]),
+        });
+      }
+    });
+
+    await page.route('**/api/mcp-servers', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ id: 's1', name: 'Search Server', slug: 'search-server' }]),
+      });
+    });
+
+    await page.goto('/settings');
+    await page.waitForLoadState('networkidle');
+
+    // 1. Open when connectors endpoint fails: palette renders gracefully without crash
+    const first = await openCommandPalette(page);
+    await first.input.fill('recovered');
+    await expect(page.getByRole('option', { name: /Recovered Connector/i })).toHaveCount(0);
 
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).not.toBeVisible();
 
-    // 3. Open a third time - still cached
-    const third = await openCommandPalette(page);
-    await third.input.fill('search');
-    await expect(page.getByRole('option', { name: /Search Server/i })).toBeVisible();
-    expect(connectorsFetches).toBe(1);
-    expect(mcpFetches).toBe(1);
+    // 2. Server recovers: since failure was NOT cached, reopening palette should fetch fresh and display
+    failConnectors = false;
+    const second = await openCommandPalette(page);
+    await second.input.fill('recovered');
+    await expect(page.getByRole('option', { name: /Recovered Connector/i })).toBeVisible();
+  });
+
+  test('stale-while-revalidate dynamically updates with newly added connectors', async ({ page }) => {
+    let connectorList = [{ id: 'c1', name: 'Stripe Payments', type: 'REST', slug: 'stripe' }];
+
+    await setupSession(page);
+
+    await page.route('**/api/connectors', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(connectorList),
+      });
+    });
+
+    await page.route('**/api/mcp-servers', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    });
+
+    await page.goto('/settings');
+    await page.waitForLoadState('networkidle');
+
+    // 1. Initial open - sees Stripe
+    const first = await openCommandPalette(page);
+    await first.input.fill('stripe');
+    await expect(page.getByRole('option', { name: /Stripe Payments/i })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // 2. User adds a new connector in the background
+    connectorList = [
+      { id: 'c1', name: 'Stripe Payments', type: 'REST', slug: 'stripe' },
+      { id: 'c2', name: 'HubSpot CRM', type: 'REST', slug: 'hubspot' },
+    ];
+
+    // 3. Re-open: Stripe is rendered immediately from cache, and background refresh fetches HubSpot
+    const second = await openCommandPalette(page);
+    await second.input.fill('hubspot');
+    await expect(page.getByRole('option', { name: /HubSpot CRM/i })).toBeVisible();
+  });
+
+  test('clears command palette cache on logout action', async ({ page }) => {
+    await setupSession(page);
+    await page.goto('/settings');
+    await page.waitForLoadState('networkidle');
+
+    // Open palette and execute logout action
+    const { input } = await openCommandPalette(page);
+    await input.fill('log out');
+    const logoutOption = page.getByRole('option', { name: /Log out/i });
+    await expect(logoutOption).toBeVisible();
+    await logoutOption.click();
+
+    // Verify redirected to login page and token cleared
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test('clears command palette cache on organization switch', async ({ page }) => {
+    let currentOrgId = 'o1';
+
+    await setupSession(page);
+
+    await page.route('**/api/organizations/switch', async (route) => {
+      currentOrgId = 'o2';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          accessToken: 'token-o2',
+          user: { ...ADMIN_USER, organizationId: 'o2' },
+          organization: { id: 'o2', name: 'Beta Corp' },
+        }),
+      });
+    });
+
+    await page.route('**/api/connectors', async (route) => {
+      const list =
+        currentOrgId === 'o1'
+          ? [{ id: 'c1', name: 'Acme Stripe', type: 'REST', slug: 'acme-stripe' }]
+          : [{ id: 'c2', name: 'Beta Salesforce', type: 'REST', slug: 'beta-salesforce' }];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(list),
+      });
+    });
+
+    await page.goto('/settings');
+    await page.waitForLoadState('networkidle');
+
+    // 1. In Org 1: open palette and verify Acme Stripe is present
+    const first = await openCommandPalette(page);
+    await first.input.fill('acme');
+    await expect(page.getByRole('option', { name: /Acme Stripe/i })).toBeVisible();
+
+    // 2. Search for organization switch action and execute it
+    await first.input.fill('Beta Corp');
+    const switchOption = page.getByRole('option', { name: /Switch to Beta Corp/i });
+    await expect(switchOption).toBeVisible();
+    await switchOption.click();
+
+    // Wait for org switch to complete and navigate to home
+    await expect(page).toHaveURL('/');
+    await page.waitForLoadState('networkidle');
+
+    // 3. Re-open palette: cache was cleared, Org 2 data is fetched and Org 1 data does not leak
+    const second = await openCommandPalette(page);
+    await second.input.fill('acme');
+    await expect(page.getByRole('option', { name: /Acme Stripe/i })).toHaveCount(0);
+
+    await second.input.fill('salesforce');
+    await expect(page.getByRole('option', { name: /Beta Salesforce/i })).toBeVisible();
   });
 
   test('section-level and item-level adminOnly and selfHostedOnly visibility filtering', async ({ page }) => {

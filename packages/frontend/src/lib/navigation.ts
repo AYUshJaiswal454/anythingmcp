@@ -97,14 +97,6 @@ export function isSettingsItemVisible(
   return true;
 }
 
-export function isSettingsSectionVisible(
-  section: SettingsSection,
-  context: NavigationVisibilityContext
-): boolean {
-  if (section.adminOnly && !context.isAdmin) return false;
-  return section.items.some((item) => isSettingsItemVisible(item, context, section));
-}
-
 export function getVisibleSettingsSections(
   sections: SettingsSection[],
   context: NavigationVisibilityContext
