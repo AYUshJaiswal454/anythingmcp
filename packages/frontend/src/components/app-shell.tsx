@@ -147,13 +147,12 @@ export function AppShell({
               onClick={() => setPaletteOpen(true)}
               aria-label="Open command palette"
               title={`Command palette (${shortcutLabel})`}
-              className="flex h-9 items-center gap-1.5 rounded-[9px] border border-[var(--border)] bg-[var(--surface)] px-2 text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] md:hidden"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[9px] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] md:hidden"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
-              <span className="text-[11px] font-medium text-[var(--text-3)]">{shortcutLabel}</span>
             </button>
             <ThemeToggle isDark={isDark} setTheme={setTheme} className="md:hidden" />
           </div>
