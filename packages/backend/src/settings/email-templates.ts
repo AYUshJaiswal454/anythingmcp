@@ -14,6 +14,8 @@ import {
   steps,
   usageBox,
 } from './email-layout';
+import { withEmailLinkToken } from '../common/email-link-token';
+import { withSourceParam } from '../license/license-checkout';
 
 /**
  * Every email the backend sends, as pure functions of their inputs: no
@@ -291,11 +293,24 @@ export function trialLifecycleEmail(
     recap: { connectors: number; successfulCalls: number; daysLeft: number };
     cloudUrl: string;
     marketingUrl: string;
+    /**
+     * The recipient's address token (common/email-link-token.ts), so the
+     * pricing page knows who buys and refuses a second subscription.
+     */
+    emailToken?: string | null;
   },
   ctx: EmailBrandContext,
 ): RenderedEmail {
   const { stage, recap, cloudUrl } = input;
-  const pricingUrl = `${input.marketingUrl}/pricing?return_url=${encodeURIComponent(`${cloudUrl}/settings/license/activate`)}`;
+  // `source` reaches the checkout's Stripe metadata (checkout_source), so a
+  // purchase from this email can be told apart from the pricing page's own.
+  const pricingUrl = withEmailLinkToken(
+    withSourceParam(
+      `${input.marketingUrl}/pricing?return_url=${encodeURIComponent(`${cloudUrl}/settings/license/activate`)}`,
+      `email_trial_${stage}`,
+    ),
+    input.emailToken,
+  );
   const licenseUrl = `${cloudUrl}/settings/license`;
   const hi = greeting(input.name);
   const days = Math.max(0, Math.round(recap.daysLeft));
@@ -434,11 +449,21 @@ export type WinbackOffer =
 const dayAndMonth = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
 
 export function trialWinbackEmail(
-  input: { name: string; offer: WinbackOffer; cloudUrl: string; marketingUrl: string },
+  input: {
+    name: string;
+    offer: WinbackOffer;
+    cloudUrl: string;
+    marketingUrl: string;
+    /** The recipient's address token for the pricing links (see trialLifecycleEmail). */
+    emailToken?: string | null;
+  },
   ctx: MarketingContext,
 ): RenderedEmail {
   const { offer, cloudUrl, marketingUrl } = input;
   const returnUrl = encodeURIComponent(`${cloudUrl}/settings/license/activate`);
+  // Every pricing link carries `source=email_winback` into the checkout's
+  // Stripe metadata; the promo code already tells the offers apart.
+  const priced = (url: string) => withEmailLinkToken(withSourceParam(url, 'email_winback'), input.emailToken);
   const hi = greeting(input.name);
   const endedOn = dayAndMonth(offer.trialEndedAt);
   const replyLine = 'Not the right time, or something was missing? Reply and tell us; we read every answer.';
@@ -451,7 +476,7 @@ export function trialWinbackEmail(
   if (offer.kind === 'firstMonth') {
     const price = esc(offer.price);
     const regular = esc(offer.regularPrice);
-    const pricingUrl = `${marketingUrl}/pricing?promo=${encodeURIComponent(offer.promoCode)}&return_url=${returnUrl}`;
+    const pricingUrl = priced(`${marketingUrl}/pricing?promo=${encodeURIComponent(offer.promoCode)}&return_url=${returnUrl}`);
     return build({
       subject: `Your first month of AnythingMCP Cloud for ${offer.price}`,
       preheader: `Your workspace is still there. Cloud Starter for ${offer.price} the first month, then ${offer.regularPrice}/month.`,
@@ -478,7 +503,7 @@ export function trialWinbackEmail(
 
   if (offer.kind === 'discount') {
     const percent = Math.round(offer.percentOff);
-    const pricingUrl = `${marketingUrl}/pricing?promo=${encodeURIComponent(offer.promoCode)}&return_url=${returnUrl}`;
+    const pricingUrl = priced(`${marketingUrl}/pricing?promo=${encodeURIComponent(offer.promoCode)}&return_url=${returnUrl}`);
     const ended = offer.stage === 'first' ? `ended on ${endedOn}` : 'ended a month ago';
     return build({
       subject:
@@ -503,7 +528,7 @@ export function trialWinbackEmail(
     });
   }
 
-  const pricingUrl = `${marketingUrl}/pricing?return_url=${returnUrl}`;
+  const pricingUrl = priced(`${marketingUrl}/pricing?return_url=${returnUrl}`);
   const connectorsUrl = `${cloudUrl}/connectors`;
   const mcpUrl = `${cloudUrl}/mcp`;
   return build({

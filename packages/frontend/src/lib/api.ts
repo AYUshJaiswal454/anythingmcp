@@ -1,4 +1,5 @@
 import type { ClickIds, SignupAttribution } from './attribution';
+import type { CheckoutSource } from './checkout-source';
 
 // Use relative paths so requests go to the same origin.
 // In production (Docker / Railway) Next.js rewrites proxy /api/* to the backend.
@@ -1424,6 +1425,11 @@ export const license = {
       trialDaysLeft?: number;
       /** Cloud, paid licences: the Stripe subscription's state. */
       billing?: LicenseBilling;
+      /**
+       * Cloud: the paid licence stopped because a card was declined, and
+       * Stripe is still retrying the subscription. Fixed with a new card.
+       */
+      paymentFailed?: boolean;
     }>('/api/license/status', { token }),
   /** Re-verify now (cloud, admin); at most once a minute per workspace. */
   refresh: (token: string) =>
@@ -1449,7 +1455,8 @@ export const license = {
       method: 'POST',
       token,
     }),
-  billingPortal: (token: string, returnUrl?: string, flow?: 'cancel') =>
+  /** 'cancel' opens Stripe's cancellation page, 'payment_method_update' the page to add a card. */
+  billingPortal: (token: string, returnUrl?: string, flow?: 'cancel' | 'payment_method_update') =>
     request<{ url: string }>('/api/license/billing-portal', {
       method: 'POST',
       body: { returnUrl, ...(flow && { flow }) },
@@ -1467,8 +1474,8 @@ export const license = {
       billingPeriod: 'monthly' | 'yearly';
       trial: boolean;
       promo?: string;
-      /** The in-app offer that led here; reaches Stripe as metadata.trial_source. */
-      source?: 'first_success';
+      /** Where in the app the checkout started; reaches Stripe as metadata.checkout_source. */
+      source?: CheckoutSource;
     },
   ) =>
     /** `trial`: whether the licence site granted the card trial asked for. */
@@ -1477,6 +1484,12 @@ export const license = {
       body,
       token,
     }),
+  /**
+   * Cloud: the signed-in user's address token for pricing links (`#t=`), so
+   * the pricing page knows who is buying. Null when the server has none.
+   */
+  pricingLinkToken: (token: string) =>
+    request<{ token: string | null }>('/api/license/pricing-link-token', { token, skipAutoLogout: true }),
   /**
    * Cloud (ADMIN): can this address start a card trial? 'pay' = it had a
    * subscription before, so a plan starts and is billed today.
